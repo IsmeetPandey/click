@@ -1199,6 +1199,61 @@ def test_missing_envvar_sequence(runner, envvar, expected):
     assert f"Error: Missing option {expected}." in result.output
 
 
+def test_missing_envvar_auto_prefix(runner):
+    cli = click.Command(
+        "cli", params=[click.Option(["--foo"], show_envvar=True, required=True)]
+    )
+    result = runner.invoke(cli, auto_envvar_prefix="TEST")
+    assert result.exit_code == 2
+    assert "Error: Missing option '--foo' (env var: 'TEST_FOO')." in result.output
+
+    cli_disabled = click.Command(
+        "cli",
+        params=[
+            click.Option(
+                ["--foo"],
+                show_envvar=True,
+                required=True,
+                allow_from_autoenv=False,
+            )
+        ],
+    )
+    result_disabled = runner.invoke(cli_disabled, auto_envvar_prefix="TEST")
+    assert result_disabled.exit_code == 2
+    assert "Error: Missing option '--foo'." in result_disabled.output
+
+    @click.group()
+    def group_cli():
+        pass
+
+    @group_cli.command()
+    @click.option("--baz", show_envvar=True, required=True)
+    def foo_bar(baz):
+        pass
+
+    result_group = runner.invoke(group_cli, ["foo-bar"], auto_envvar_prefix="TEST")
+    assert result_group.exit_code == 2
+    assert (
+        "Error: Missing option '--baz' (env var: 'TEST_FOO_BAR_BAZ')."
+        in result_group.output
+    )
+
+
+@pytest.mark.parametrize("envvar", [None, [], ""])
+def test_missing_envvar_auto_prefix_empty(runner, envvar):
+    """An empty ``envvar`` with ``auto_envvar_prefix`` uses the auto-generated
+    env var.
+    """
+    option = click.Option(["--units"], envvar=envvar, show_envvar=True, required=True)
+    result = runner.invoke(
+        click.Command("cli", params=[option]), auto_envvar_prefix="WEATHER"
+    )
+    assert result.exit_code == 2
+    assert (
+        "Error: Missing option '--units' (env var: 'WEATHER_UNITS')." in result.output
+    )
+
+
 def test_case_insensitive_choice(runner):
     @click.command()
     @click.option("--foo", type=click.Choice(["Orange", "Apple"], case_sensitive=False))
